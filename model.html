@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.8.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-converter@4.8.0"></script>
+  </head>
+  <body>
+    <input type="file" id="imageUpload" accept="image/*" />
+    <img src="" id="previewImage" width="224" height="224" alt="image" />
+    <button onclick="predictImage()">Predict</button>
+    <p id="prediction"></p>
+
+    <script>
+      async function predictImage() {
+        const imageUpload = document.getElementById("imageUpload");
+        const previewImage = document.getElementById("previewImage");
+        const prediction = document.getElementById("prediction");
+        const image = imageUpload.files[0];
+        console.log(image);
+        const imageTensor = await loadImageTensor(image);
+        console.log(imageTensor);
+        const model = await tf.loadLayersModel("tfjs_model/model.json");
+        console.log("model", model);
+        const output = model.predict(imageTensor);
+
+        const predictedClass = output.argMax(1).dataSync()[0];
+        prediction.innerText = "Predicted class: " + predictedClass;
+      }
+
+      function loadImageTensor(image) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = function (event) {
+            const imageElement = document.createElement("img");
+            console.log("image" + imageElement);
+            imageElement.onload = function () {
+              const canvas = document.createElement("canvas");
+              canvas.width = 224;
+              canvas.height = 224;
+              console.log("canvas" + canvas);
+              const ctx = canvas.getContext("2d");
+              ctx.drawImage(imageElement, 0, 0, 224, 224);
+              const imageData = ctx.getImageData(0, 0, 224, 224);
+              const { data } = imageData;
+
+              const imageArray = new Float32Array(224 * 224 * 3);
+              console.log("imageArray length", imageArray.length);
+              let pixelIndex = 0;
+              for (let i = 0; i < data.length; i += 4) {
+                imageArray[pixelIndex++] = data[i] / 255;
+                imageArray[pixelIndex++] = data[i + 1] / 255;
+                imageArray[pixelIndex++] = data[i + 2] / 255;
+              }
+              console.log("imageArray", imageArray);
+
+              const imageTensor = tf.tensor4d(
+                imageArray,
+                [1, 224, 224, 3],
+                "float32"
+              );
+
+              console.log("imageTensor shape", imageTensor.shape);
+
+              resolve(imageTensor);
+            };
+            console.log("event", event.target.result);
+            imageElement.src = event.target.result;
+          };
+          reader.readAsDataURL(image);
+        });
+      }
+    </script>
+  </body>
+</html>
