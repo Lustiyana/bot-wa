@@ -17,7 +17,7 @@ const app = express();
 
 app.use(express.static("public"));
 
-app.listen(3000, () => {
+app.listen(3001, () => {
   // Initialize WhatsApp client
   const client = new Client({
     authStrategy: new LocalAuth({ dataPath: "auth" }),
@@ -28,7 +28,7 @@ app.listen(3000, () => {
     qrcode.generate(qr, { small: true });
   });
 
-  // // Log message when client is ready
+  // Log message when client is ready
   client.on("ready", () => {
     console.log("WhatsApp bot ready");
   });
@@ -76,45 +76,108 @@ app.listen(3000, () => {
       const name = media.mimetype.split("/")[0];
       const ext = media.mimetype.split("/")[1];
 
-      formData.append("files", Buffer.from(media.data, "base64"), {
+      formData.append("image", Buffer.from(media.data, "base64"), {
         filename: `${getYear}-${getMonth}-${getDate}-${getHours}-${getMinutes}-${getSeconds}-${getMilliseconds}.${ext}`,
         contentType: media.mimetype,
         knownLength: media.size,
       });
 
       axios
-        .post("http://127.0.0.1:1337/api/upload", formData)
+        .post("http://127.0.0.1:8001/process", formData)
         .then(async (res) => {
-          const imageId = res.data[0].id;
-          const uploadedImage = res.data[0].url;
-          const predictedImage = await predictImage(
-            `http://127.0.0.1:1337${uploadedImage}`
-          );
+          console.log(res.data.image);
 
-          console.log("Predicted", predictedImage);
-          axios
-            .post("http://127.0.0.1:1337/api/attendances", {
-              data: {
-                image: imageId,
-                name: predictedImage.attributes.name,
-                status: true,
-              },
-            })
-            .then(() => {
-              msg.reply("Media berhasil diunggah ke API");
-              msg.reply("Berhasil melakukan absen");
-            });
+          try {
+            const predictedImage = await predictImage(
+              `http://127.0.0.1:8001${res.data.image}`
+            );
+
+            console.log("Predicted Image: ", predictedImage);
+
+            axios
+              .post("http://18.143.172.4:1337/api/attendances", {
+                data: {
+                  // image: imageId,
+                  name: predictedImage.name,
+                  status: true,
+                },
+              })
+              .then(() => {
+                msg.reply("Media berhasil diunggah ke API");
+                msg.reply("Berhasil melakukan absen");
+              })
+              .catch((respErr) => {
+                console.log("RESP ERRPR: ", respErr.response.data);
+              });
+          } catch (err) {
+            console.log(err);
+          }
+          // axios
+          //   .post("http://18.143.172.4:1337/api/upload", formData)
+          //   .then(async (res) => {
+          //     const imageId = res.data[0].id;
+          //     const uploadedImage = res.data[0].url;
+          //     const predictedImage = await predictImage(
+          //       `http://18.143.172.4:1337${uploadedImage}`
+          //     );
+
+          //     console.log("Predicted", predictedImage);
+          //     axios
+          //       .post("http://18.143.172.4:1337/api/attendances", {
+          //         data: {
+          //           image: imageId,
+          //           name: predictedImage.name,
+          //           status: true,
+          //         },
+          //       })
+          //       .then(() => {
+          //         msg.reply("Media berhasil diunggah ke API");
+          //         msg.reply("Berhasil melakukan absen");
+          //       });
+          //   })
+          //   .catch((err) => {
+          //     console.log("err?.response", err?.response);
+          //     console.log("err?.response?.data", err?.response?.data);
+          //     msg.reply("Terjadi kesalahan saat mengunggah media ke API");
+          //   });
         })
         .catch((err) => {
-          console.log(err?.response);
-          console.log(err);
-          msg.reply("Terjadi kesalahan saat mengunggah media ke API");
+          console.log(err.response.data);
         });
+
+      // axios
+      //   .post("http://18.143.172.4:1337/api/upload", formData)
+      //   .then(async (res) => {
+      //     const imageId = res.data[0].id;
+      //     const uploadedImage = res.data[0].url;
+      //     const predictedImage = await predictImage(
+      //       `http://18.143.172.4:1337${uploadedImage}`
+      //     );
+
+      //     console.log("Predicted", predictedImage);
+      //     axios
+      //       .post("http://18.143.172.4:1337/api/attendances", {
+      //         data: {
+      //           image: imageId,
+      //           name: predictedImage.name,
+      //           status: true,
+      //         },
+      //       })
+      //       .then(() => {
+      //         msg.reply("Media berhasil diunggah ke API");
+      //         msg.reply("Berhasil melakukan absen");
+      //       });
+      //   })
+      //   .catch((err) => {
+      //     console.log(err?.response);
+      //     console.log(err);
+      //     msg.reply("Terjadi kesalahan saat mengunggah media ke API");
+      //   });
     }
   });
 
   async function getClasses() {
-    const dataClasses = await axios.get("http://127.0.0.1:1337/api/students");
+    const dataClasses = await axios.get("http://18.143.172.4:1337/api/users");
 
     return dataClasses;
   }
@@ -162,7 +225,7 @@ app.listen(3000, () => {
 
     // Load TensorFlow.js model
     const model = await tf.loadLayersModel(
-      "http://localhost:3000/tfjs_model/model.json"
+      "http://localhost:3001/tfjs_model/model.json"
     );
 
     console.log("Load model succesfully!");
@@ -174,11 +237,13 @@ app.listen(3000, () => {
     console.log("OUTPUT", output.argMax(1));
     console.log("OUTPUT DATA SYNC", output.argMax(1).dataSync());
     console.log(predictedClass);
+    console.log(classes.data);
+    console.log("PREDICTED CLASS", classes.data[predictedClass]);
 
-    return classes.data.data[predictedClass];
+    return classes.data[predictedClass];
   }
 
   client.initialize();
 
-  console.log("App listen in port: 3000");
+  console.log("App listen in port: 3001");
 });
