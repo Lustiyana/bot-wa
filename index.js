@@ -73,7 +73,6 @@ app.listen(3001, () => {
       const datURL = `data:${media.mimetype};base64,${buffer.toString(
         "base64"
       )}`;
-      const name = media.mimetype.split("/")[0];
       const ext = media.mimetype.split("/")[1];
 
       formData.append("image", Buffer.from(media.data, "base64"), {
@@ -83,28 +82,23 @@ app.listen(3001, () => {
       });
 
       axios
-        .post("http://127.0.0.1:8001/process", formData)
+        .post("https://mtcnn.lustiyana18.my.id/process", formData)
         .then(async (res) => {
-          console.log(res.data.image);
-
+          console.log(res.data);
           try {
-            const predictedImage = await predictImage(
-              `http://127.0.0.1:8001${res.data.image}`
-            );
-
-            console.log("Predicted Image: ", predictedImage);
-
             axios
-              .post("http://18.143.172.4:1337/api/attendances", {
+              .post("https://strapi.lustiyana18.my.id/api/attendances", {
                 data: {
-                  // image: imageId,
-                  name: predictedImage.name,
+                  name: res.data.prediction,
                   status: true,
                 },
               })
               .then(() => {
-                msg.reply("Media berhasil diunggah ke API");
-                msg.reply("Berhasil melakukan absen");
+                msg.reply(
+                  `Selamat! ${res.data.prediction} telah melakukan absen`
+                );
+                // msg.reply("Media berhasil diunggah ke API");
+                // msg.reply("Berhasil melakukan absen");
               })
               .catch((respErr) => {
                 console.log("RESP ERRPR: ", respErr.response.data);
@@ -112,136 +106,20 @@ app.listen(3001, () => {
           } catch (err) {
             console.log(err);
           }
-          // axios
-          //   .post("http://18.143.172.4:1337/api/upload", formData)
-          //   .then(async (res) => {
-          //     const imageId = res.data[0].id;
-          //     const uploadedImage = res.data[0].url;
-          //     const predictedImage = await predictImage(
-          //       `http://18.143.172.4:1337${uploadedImage}`
-          //     );
-
-          //     console.log("Predicted", predictedImage);
-          //     axios
-          //       .post("http://18.143.172.4:1337/api/attendances", {
-          //         data: {
-          //           image: imageId,
-          //           name: predictedImage.name,
-          //           status: true,
-          //         },
-          //       })
-          //       .then(() => {
-          //         msg.reply("Media berhasil diunggah ke API");
-          //         msg.reply("Berhasil melakukan absen");
-          //       });
-          //   })
-          //   .catch((err) => {
-          //     console.log("err?.response", err?.response);
-          //     console.log("err?.response?.data", err?.response?.data);
-          //     msg.reply("Terjadi kesalahan saat mengunggah media ke API");
-          //   });
         })
         .catch((err) => {
-          console.log(err.response.data);
+          console.log(err);
         });
-
-      // axios
-      //   .post("http://18.143.172.4:1337/api/upload", formData)
-      //   .then(async (res) => {
-      //     const imageId = res.data[0].id;
-      //     const uploadedImage = res.data[0].url;
-      //     const predictedImage = await predictImage(
-      //       `http://18.143.172.4:1337${uploadedImage}`
-      //     );
-
-      //     console.log("Predicted", predictedImage);
-      //     axios
-      //       .post("http://18.143.172.4:1337/api/attendances", {
-      //         data: {
-      //           image: imageId,
-      //           name: predictedImage.name,
-      //           status: true,
-      //         },
-      //       })
-      //       .then(() => {
-      //         msg.reply("Media berhasil diunggah ke API");
-      //         msg.reply("Berhasil melakukan absen");
-      //       });
-      //   })
-      //   .catch((err) => {
-      //     console.log(err?.response);
-      //     console.log(err);
-      //     msg.reply("Terjadi kesalahan saat mengunggah media ke API");
-      //   });
     }
   });
 
-  async function getClasses() {
-    const dataClasses = await axios.get("http://18.143.172.4:1337/api/users");
+  // async function getClasses() {
+  //   const dataClasses = await axios.get(
+  //     "https://strapi.lustiyana18.my.id/api/users?sort[0]=name"
+  //   );
 
-    return dataClasses;
-  }
-
-  // Function to get image classification prediction with TF.js
-  async function predictImage(uploadedImage) {
-    const classes = await getClasses();
-
-    // Load image data into TensorFlow.js tensor
-    const imageBuffer = await new Promise((resolve, reject) => {
-      request(
-        { url: uploadedImage, encoding: null },
-        (error, response, body) => {
-          if (error) reject(error);
-          else if (response.statusCode !== 200)
-            reject(
-              new Error(
-                `Failed to retrieve image, status code: ${response.statusCode}`
-              )
-            );
-          else resolve(body);
-        }
-      );
-    });
-
-    // Load the image buffer into a canvas
-    const image = await loadImage(imageBuffer);
-    const canvas = createCanvas(image.width, image.height);
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(image, 0, 0, 224, 224);
-    const imageData = ctx.getImageData(0, 0, 224, 224);
-    const { data } = imageData;
-    const imageArray = new Float32Array(224 * 224 * 3);
-
-    let pixelIndex = 0;
-
-    for (let i = 0; i < data.length; i += 4) {
-      imageArray[pixelIndex++] = data[i] / 255;
-      imageArray[pixelIndex++] = data[i + 1] / 255;
-      imageArray[pixelIndex++] = data[i + 2] / 255;
-    }
-    console.log("imageArray", imageArray);
-
-    const imageTensor = tf.tensor4d(imageArray, [1, 224, 224, 3], "float32");
-
-    // Load TensorFlow.js model
-    const model = await tf.loadLayersModel(
-      "http://localhost:3001/tfjs_model/model.json"
-    );
-
-    console.log("Load model succesfully!");
-
-    const output = model.predict(imageTensor);
-
-    const predictedClass = output.argMax(1).dataSync()[0];
-
-    console.log("OUTPUT", output.argMax(1));
-    console.log("OUTPUT DATA SYNC", output.argMax(1).dataSync());
-    console.log(predictedClass);
-    console.log(classes.data);
-    console.log("PREDICTED CLASS", classes.data[predictedClass]);
-
-    return classes.data[predictedClass];
-  }
+  //   return dataClasses;
+  // }
 
   client.initialize();
 
