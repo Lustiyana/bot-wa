@@ -1,16 +1,9 @@
 const qrcode = require("qrcode-terminal");
 const { Client, LocalAuth } = require("whatsapp-web.js");
 const axios = require("axios");
-const fs = require("fs");
-const puppeteer = require("puppeteer");
-const tf = require("@tensorflow/tfjs");
-const jpeg = require("jpeg-js");
-const { createCanvas, loadImage } = require("canvas");
 const express = require("express");
-const request = require("request");
 const FormData = require("form-data");
 const { Blob } = require("buffer");
-const path = require("path");
 
 // Connect to WhatsApp Web
 const app = express();
@@ -48,8 +41,16 @@ app.listen(3001, () => {
     return blob;
   }
 
+  const getPhoneNumber = (message) => {
+    const phoneNumberWithSuffix = message.from;
+    const phoneNumberWithoutSuffix = phoneNumberWithSuffix.replace("@c.us", "");
+    const phoneNumber = phoneNumberWithoutSuffix.replace(/^62/, "");
+    return phoneNumber;
+  };
+
   // Handle incoming messages with media files
   client.on("message", async (msg) => {
+    const phone = getPhoneNumber(msg);
     if (msg.body === "hai") {
       msg.reply("Hai ada yang bisa dibantu");
     }
@@ -81,45 +82,58 @@ app.listen(3001, () => {
         knownLength: media.size,
       });
 
-      axios
-        .post("https://mtcnn.lustiyana18.my.id/process", formData)
-        .then(async (res) => {
-          console.log(res.data);
-          try {
-            axios
-              .post("https://strapi.lustiyana18.my.id/api/attendances", {
-                data: {
-                  name: res.data.prediction,
-                  status: true,
-                },
-              })
-              .then(() => {
-                msg.reply(
-                  `Selamat! ${res.data.prediction} telah melakukan absen`
-                );
-                // msg.reply("Media berhasil diunggah ke API");
-                // msg.reply("Berhasil melakukan absen");
-              })
-              .catch((respErr) => {
-                console.log("RESP ERRPR: ", respErr.response.data);
-              });
-          } catch (err) {
-            console.log(err);
-          }
-        })
-        .catch((err) => {
-          console.log(err);
+      axios.get("http://127.0.0.1:1337/api/users?sort=name").then((res) => {
+        let dataIds = [];
+        res.data.map((item) => {
+          dataIds.push(item.id);
         });
+        formData.append("classes", dataIds.join(";"));
+        axios
+          .post("http://127.0.0.1:8001/process", formData)
+          .then(async (res) => {
+            try {
+              await axios
+                .get(`http://127.0.0.1:1337/api/users/${res.data.prediction}`)
+                .then(async (res) => {
+                  console.log(res.data);
+                  if (phone === res.data.phone) {
+                    try {
+                      await axios
+                        .post("http://127.0.0.1:1337/api/attendances", {
+                          data: {
+                            name: res.data.name,
+                            nim: res.data.nim,
+                            status: true,
+                          },
+                        })
+                        .then((res) => {
+                          console.log(res.data);
+                          msg.reply(
+                            `Selamat! ${res.data.data.attributes.name} dengan nim ${res.data.data.attributes.nim} telah melakukan absen`
+                          );
+                        })
+                        .catch((respErr) => {
+                          console.log("RESP ERRPR: ", respErr);
+                        });
+                    } catch (err) {
+                      console.log(err);
+                    }
+                  } else {
+                    msg.reply(
+                      `Absen gagal! Nomor telepon yang digunakan tidak sesuai dengan nama ${res.data.name} dan nim ${res.data.nim}`
+                    );
+                  }
+                });
+            } catch (err) {
+              console.log(err);
+            }
+          })
+          .catch((err) => {
+            console.log(err);
+          });
+      });
     }
   });
-
-  // async function getClasses() {
-  //   const dataClasses = await axios.get(
-  //     "https://strapi.lustiyana18.my.id/api/users?sort[0]=name"
-  //   );
-
-  //   return dataClasses;
-  // }
 
   client.initialize();
 
