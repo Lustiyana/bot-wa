@@ -55,6 +55,7 @@ app.listen(3001, () => {
       msg.reply("Hai ada yang bisa dibantu");
     }
     if (msg.hasMedia) {
+      msg.reply("Tunggu sebentar ya, absen kamu sedang diproses");
       const media = (await msg.downloadMedia()) || {
         mimetype: "image/png",
         data: "",
@@ -81,7 +82,6 @@ app.listen(3001, () => {
         contentType: media.mimetype,
         knownLength: media.size,
       });
-
       axios.get("http://127.0.0.1:1337/api/users?sort=name").then((res) => {
         let dataIds = [];
         res.data.map((item) => {
@@ -91,41 +91,46 @@ app.listen(3001, () => {
         axios
           .post("http://127.0.0.1:8001/process", formData)
           .then(async (res) => {
-            try {
-              await axios
-                .get(`http://127.0.0.1:1337/api/users/${res.data.prediction}`)
-                .then(async (res) => {
-                  console.log(res.data);
-                  if (phone === res.data.phone) {
-                    try {
-                      await axios
-                        .post("http://127.0.0.1:1337/api/attendances", {
-                          data: {
-                            name: res.data.name,
-                            nim: res.data.nim,
-                            status: true,
-                          },
-                        })
-                        .then((res) => {
-                          console.log(res.data);
-                          msg.reply(
-                            `Selamat! ${res.data.data.attributes.name} dengan nim ${res.data.data.attributes.nim} telah melakukan absen`
-                          );
-                        })
-                        .catch((respErr) => {
-                          console.log("RESP ERRPR: ", respErr);
-                        });
-                    } catch (err) {
-                      console.log(err);
+            if (res.data.success) {
+              try {
+                await axios
+                  .get(`http://127.0.0.1:1337/api/users/${res.data.prediction}`)
+                  .then(async (res) => {
+                    if (
+                      phone === res.data.phone &&
+                      res.data.phone != undefined
+                    ) {
+                      try {
+                        await axios
+                          .post("http://127.0.0.1:1337/api/attendances", {
+                            data: {
+                              name: res.data.name,
+                              nim: res.data.nim,
+                              status: true,
+                            },
+                          })
+                          .then((res) => {
+                            msg.reply(
+                              `Selamat! ${res.data.data.attributes.name} dengan nim ${res.data.data.attributes.nim} telah melakukan absen`
+                            );
+                          })
+                          .catch((err) => {
+                            console.log(err);
+                          });
+                      } catch (err) {
+                        console.log(err);
+                      }
+                    } else {
+                      msg.reply(
+                        `Absen gagal! Nomor telepon yang digunakan tidak sesuai dengan nama ${res.data.name} dan nim ${res.data.nim}`
+                      );
                     }
-                  } else {
-                    msg.reply(
-                      `Absen gagal! Nomor telepon yang digunakan tidak sesuai dengan nama ${res.data.name} dan nim ${res.data.nim}`
-                    );
-                  }
-                });
-            } catch (err) {
-              console.log(err);
+                  });
+              } catch (err) {
+                console.log(err);
+              }
+            } else {
+              msg.reply(res.data.error);
             }
           })
           .catch((err) => {
