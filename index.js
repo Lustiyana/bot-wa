@@ -4,6 +4,10 @@ const axios = require("axios");
 const express = require("express");
 const FormData = require("form-data");
 const { Blob } = require("buffer");
+require("dotenv/config");
+
+const modelUrl = process.env.MODEL_URL;
+const strapiURL = process.env.STRAPI_URL;
 
 // Connect to WhatsApp Web
 const app = express();
@@ -82,19 +86,19 @@ app.listen(3001, () => {
         contentType: media.mimetype,
         knownLength: media.size,
       });
-      axios.get("http://127.0.0.1:1337/api/users?sort=name").then((res) => {
+      axios.get(`${strapiURL}/api/users?sort=name`).then((res) => {
         let dataIds = [];
         res.data.map((item) => {
           dataIds.push(item.id);
         });
         formData.append("classes", dataIds.join(";"));
         axios
-          .post("http://127.0.0.1:8001/process", formData)
+          .post(`${modelUrl}/process`, formData)
           .then(async (res) => {
             if (res.data.success) {
               try {
                 await axios
-                  .get(`http://127.0.0.1:1337/api/users/${res.data.prediction}`)
+                  .get(`${strapiURL}/api/users/${res.data.prediction}`)
                   .then(async (res) => {
                     if (
                       phone === res.data.phone &&
@@ -102,7 +106,7 @@ app.listen(3001, () => {
                     ) {
                       try {
                         await axios
-                          .post("http://127.0.0.1:1337/api/attendances", {
+                          .post(`${strapiURL}/api/attendances`, {
                             data: {
                               name: res.data.name,
                               nim: res.data.nim,
