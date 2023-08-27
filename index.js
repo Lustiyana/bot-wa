@@ -65,91 +65,75 @@ app.listen(3001, () => {
           knownLength: media.size,
         });
 
+        //Classes
         const res = await axios.get(`${strapiURL}/api/users?sort=name`);
         const dataIds = res.data.map((item) => item.id);
         formData.append("classes", dataIds.join(";"));
 
+        // Image Array
+        const populateImage = await axios.get(
+          `${strapiURL}/api/attendances?filters[phone][$eq]=${phone}&populate=*`
+        );
+        const imagesAttendance = populateImage.data.data;
+        const arr = [];
+        for (const key in imagesAttendance) {
+          arr.push(
+            `${strapiURL}${imagesAttendance[key].attributes.image.data.attributes.url}`
+          );
+        }
+        if (arr.length > 0) {
+          formData.append("image_array", arr.join(";"));
+        } else {
+          formData.append("image_array", "");
+        }
+
         const mlResponse = await axios.post(`${modelUrl}/process`, formData);
-        if (mlResponse.data.success) {
-          const userResponse = await axios.get(
-            `${strapiURL}/api/users/${mlResponse.data.prediction}`
-          );
-          const userData = userResponse.data;
+        const userResponse = await axios.get(
+          `${strapiURL}/api/users/${mlResponse.data.prediction}`
+        );
+        const userData = userResponse.data;
 
-          const populateImage = await axios.get(
-            `${strapiURL}/api/attendances?filters[user][id][$eq]=${mlResponse.data.prediction}&populate=*`
-          );
-          const imagesAttendance = populateImage.data.data;
-          const arr = [];
-          for (const key in imagesAttendance) {
-            arr.push(
-              `${strapiURL}${imagesAttendance[key].attributes.image.data.attributes.url}`
-            );
-          }
-
-          const formImageChecking = new FormData();
-          formImageChecking.append("image", Buffer.from(media.data, "base64"), {
+        if (phone === userData.phone && userData.phone !== undefined) {
+          const formUpload = new FormData();
+          formUpload.append("files", Buffer.from(media.data, "base64"), {
             filename: `${Date.now()}.${ext}`,
             contentType: media.mimetype,
             knownLength: media.size,
           });
-          if (arr.length > 0) {
-            formImageChecking.append("image_array", arr.join(";"));
-          } else {
-            formImageChecking.append("image_array", "");
-          }
-          const imageChecking = await axios.post(
-            `${modelUrl}/image-checking`,
-            formImageChecking
-          );
-
-          if (imageChecking.data.success) {
-            if (phone === userData.phone && userData.phone !== undefined) {
-              const formUpload = new FormData();
-              formUpload.append("files", Buffer.from(media.data, "base64"), {
-                filename: `${Date.now()}.${ext}`,
-                contentType: media.mimetype,
-                knownLength: media.size,
-              });
-              try {
-                const uploadResponse = await axios.post(
-                  `${strapiURL}/api/upload`,
-                  formUpload
-                  // { headers: { "Content-Type": "multipart/form-data" } }
-                );
-                await axios.post(`${strapiURL}/api/attendances`, {
-                  data: {
-                    name: userData.name,
-                    nim: userData.nim,
-                    status: true,
-                    image: uploadResponse.data[0].id,
-                    user: mlResponse.data.prediction,
-                  },
-                });
-                msg.reply(
-                  `Selamat! ${userData.name} dengan nim ${userData.nim} telah melakukan absen`
-                );
-              } catch (e) {
-                console.log(e.response?.data?.error?.message);
-                msg.reply(
-                  `Terjadi kesalahan pada sistem, coba lagi.${e.response?.data?.error?.message}`
-                );
-              }
-            } else {
-              msg.reply(
-                `Absen gagal! Nomor telepon yang digunakan tidak sesuai dengan nama ${userData.name} dan nim ${userData.nim}`
-              );
-            }
-          } else {
-            msg.reply(imageChecking.data.message);
+          try {
+            const uploadResponse = await axios.post(
+              `${strapiURL}/api/upload`,
+              formUpload
+              // { headers: { "Content-Type": "multipart/form-data" } }
+            );
+            await axios.post(`${strapiURL}/api/attendances`, {
+              data: {
+                name: userData.name,
+                nim: userData.nim,
+                status: true,
+                image: uploadResponse.data[0].id,
+                user: mlResponse.data.prediction,
+              },
+            });
+            msg.reply(
+              `Selamat! ${userData.name} dengan nim ${userData.nim} telah melakukan absen`
+            );
+          } catch (e) {
+            console.log(e.response?.data?.error?.message);
+            msg.reply(
+              `Terjadi kesalahan pada sistem, coba lagi.${e.response?.data?.error?.message}`
+            );
           }
         } else {
-          msg.reply(mlResponse.data.error);
+          msg.reply(
+            `Absen gagal! Nomor telepon yang digunakan tidak sesuai dengan nama ${userData.name} dan nim ${userData.nim}`
+          );
         }
       } catch (error) {
-        console.error(error);
-        msg.reply("Terjadi kesalahan dalam memproses absen, coba lagi");
-        throw error;
+        console.error(error.response.data);
+        msg.reply(
+          `Terjadi kesalahan dalam memproses absen: *${error.response.data.message}. Coba lagi*`
+        );
       }
     }
   });
