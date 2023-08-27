@@ -98,7 +98,6 @@ app.listen(3001, () => {
           } else {
             formImageChecking.append("image_array", "");
           }
-
           const imageChecking = await axios.post(
             `${modelUrl}/image-checking`,
             formImageChecking
